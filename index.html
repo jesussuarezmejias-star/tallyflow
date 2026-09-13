@@ -279,7 +279,9 @@
   // ---- Supabase setup ----
   const SUPABASE_URL = 'https://popruxdkjgecqhjziexw.supabase.co';
   const SUPABASE_KEY = 'sb_publishable_IiBkpJMeHgtc0Dorn5POSw_rgGcuSKk';
-  const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+    auth: { flowType: 'implicit', detectSessionInUrl: true, persistSession: true }
+  });
 
   const FREE_LIMIT = 3;
   let currentUser = null;
@@ -334,11 +336,20 @@
 
   async function init() {
     showScreen('loading');
+
+    // Show a clear error if the email link itself failed (expired, wrong browser, etc.)
+    const hashParams = new URLSearchParams(window.location.hash.replace('#', '?'));
+    const queryParams = new URLSearchParams(window.location.search);
+    const linkError = hashParams.get('error_description') || queryParams.get('error_description');
+
     const { data: { session } } = await sb.auth.getSession();
     if (session) {
       await onLoggedIn(session.user);
     } else {
       showScreen('auth');
+      if (linkError) {
+        document.getElementById('authError').textContent = decodeURIComponent(linkError.replace(/\+/g, ' '));
+      }
     }
   }
 
@@ -487,4 +498,5 @@
   init();
 </script>
 </body>
-</html>
+  </html>
+  
