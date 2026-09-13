@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ledger — Subscription Tracker</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=IBM+Plex+Mono:wght@400;500;600&family=Work+Sans:wght@400;500;600&display=swap');
+
+  :root {
+    --bg: #0F1B18;
+    --surface: #16241F;
+    --surface-raised: #1C2E27;
+    --line: #2A3D35;
+    --text: #EDEAE0;
+    --text-dim: #9FB3A8;
+    --amber: #E8A33D;
+    --sage: #6B8F82;
+    --urgent: #D9556B;
+    --radius: 3px;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Work Sans', sans-serif;
+    min-height: 100vh;
+    padding: 32px 20px 80px;
+  }
+
+  .wrap { max-width: 640px; margin: 0 auto; }
+
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 28px;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 16px;
+  }
+
+  header .title-group { display: flex; align-items: center; gap: 8px; }
+  header h1 { font-family: 'Fraunces', serif; font-weight: 500; font-size: 22px; margin: 0; letter-spacing: 0.2px; }
+
+  .pro-badge {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    background: var(--amber);
+    color: #1B140A;
+    padding: 2px 6px;
+    border-radius: var(--radius);
+    font-weight: 600;
+    letter-spacing: 0.5px;
+  }
+
+  .header-right { display: flex; align-items: center; gap: 12px; }
+  header span.date { font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: var(--text-dim); }
+  .logout-btn { background: none; border: none; color: var(--text-dim); font-size: 11px; cursor: pointer; text-decoration: underline; padding: 0; }
+
+  .statement { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 24px; margin-bottom: 20px; }
+  .statement-row { display: flex; justify-content: space-between; align-items: flex-end; }
+  .statement-label { font-size: 13px; color: var(--text-dim); margin-bottom: 6px; }
+  .statement-figure { font-family: 'Fraunces', serif; font-size: 40px; font-weight: 500; line-height: 1; }
+  .statement-sub { font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: var(--text-dim); text-align: right; }
+  .statement-sub b { color: var(--urgent); font-weight: 600; }
+
+  .divider { height: 1px; background: var(--line); margin: 20px 0; }
+  .breakdown { display: flex; gap: 24px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: var(--text-dim); }
+  .breakdown b { color: var(--text); font-weight: 500; }
+
+  .ledger { border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; margin-bottom: 20px; }
+  .ledger-head { display: grid; grid-template-columns: 1fr 90px 90px 30px; gap: 8px; padding: 10px 16px; font-size: 11px; color: var(--text-dim); border-bottom: 1px solid var(--line); background: var(--surface-raised); }
+  .row { display: grid; grid-template-columns: 1fr 90px 90px 30px; gap: 8px; align-items: center; padding: 14px 16px; border-bottom: 1px solid var(--line); background: var(--surface); }
+  .row:last-child { border-bottom: none; }
+  .row-name { font-size: 14px; }
+  .row-cycle { font-size: 11px; color: var(--text-dim); display: block; margin-top: 2px; }
+  .row-amount { font-family: 'IBM Plex Mono', monospace; font-size: 14px; text-align: right; }
+  .row-date { font-family: 'IBM Plex Mono', monospace; font-size: 12px; text-align: right; color: var(--text-dim); }
+  .row-date.soon { color: var(--urgent); }
+  .row-del { background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 16px; text-align: right; padding: 0; }
+  .row-del:hover { color: var(--urgent); }
+
+  .empty { padding: 40px 16px; text-align: center; color: var(--text-dim); font-size: 13px; }
+
+  form { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; display: grid; gap: 12px; }
+  .form-title { font-family: 'Fraunces', serif; font-size: 15px; margin-bottom: 4px; }
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  label { font-size: 11px; color: var(--text-dim); display: block; margin-bottom: 4px; }
+
+  input, select {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    color: var(--text);
+    padding: 9px 10px;
+    border-radius: var(--radius);
+    font-family: 'Work Sans', sans-serif;
+    font-size: 13px;
+  }
+  input:focus, select:focus { outline: none; border-color: var(--sage); }
+
+  button.submit {
+    background: var(--amber);
+    color: #1B140A;
+    border: none;
+    padding: 11px;
+    border-radius: var(--radius);
+    font-weight: 600;
+    font-size: 13px;
+    cursor: pointer;
+    margin-top: 4px;
+  }
+  button.submit:hover { filter: brightness(1.08); }
+  button.submit:disabled { opacity: 0.6; cursor: not-allowed; }
+
+  .error { color: var(--urgent); font-size: 12px; min-height: 14px; }
+  .info { color: var(--sage); font-size: 12px; min-height: 14px; }
+
+  .limit-banner {
+    background: var(--surface-raised);
+    border: 1px solid var(--amber);
+    border-radius: var(--radius);
+    padding: 16px 20px;
+    margin-bottom: 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+  }
+  .limit-banner p { margin: 0; font-size: 13px; color: var(--text); }
+  .limit-banner span { color: var(--text-dim); font-size: 12px; }
+
+  .upgrade-btn {
+    background: var(--amber);
+    color: #1B140A;
+    border: none;
+    padding: 9px 16px;
+    border-radius: var(--radius);
+    font-weight: 600;
+    font-size: 12px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .upgrade-btn:hover { filter: brightness(1.08); }
+
+  .pro-panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; margin-bottom: 20px; }
+  .pro-panel h3 { font-family: 'Fraunces', serif; font-size: 14px; margin: 0 0 12px; font-weight: 500; }
+  .pro-feature { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+  .pro-feature:last-child { border-bottom: none; }
+  .pro-feature .status { font-family: 'IBM Plex Mono', monospace; font-size: 11px; }
+  .status.locked { color: var(--text-dim); }
+  .status.active { color: var(--sage); }
+
+  .footer-note { text-align: center; padding: 16px; color: var(--text-dim); font-size: 12px; }
+
+  /* Auth screen */
+  #authScreen {
+    max-width: 380px;
+    margin: 80px auto;
+    text-align: center;
+  }
+  #authScreen h1 { font-family: 'Fraunces', serif; font-size: 26px; margin-bottom: 6px; }
+  #authScreen p.sub { color: var(--text-dim); font-size: 13px; margin-bottom: 24px; }
+  #authScreen form { text-align: left; }
+  #loadingScreen { text-align: center; padding: 100px 0; color: var(--text-dim); font-size: 13px; }
+
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<div id="loadingScreen" class="wrap">Loading…</div>
+
+<div id="authScreen" class="wrap hidden">
+  <h1>Ledger</h1>
+  <p class="sub">Track your subscriptions. No password needed — we'll email you a login link.</p>
+  <form id="authForm">
+    <label>Email</label>
+    <input type="email" id="authEmail" placeholder="you@example.com" required>
+    <div class="error" id="authError"></div>
+    <div class="info" id="authInfo"></div>
+    <button type="submit" class="submit" id="authBtn">Send login link</button>
+  </form>
+</div>
+
+<div id="app" class="wrap hidden">
+  <header>
+    <div class="title-group">
+      <h1>Ledger</h1>
+      <span class="pro-badge" id="proBadge" style="display:none">PRO</span>
+    </div>
+    <div class="header-right">
+      <span class="date" id="today"></span>
+      <button class="logout-btn" id="logoutBtn">log out</button>
+    </div>
+  </header>
+
+  <div class="statement">
+    <div class="statement-row">
+      <div>
+        <div class="statement-label">Estimated monthly spend</div>
+        <div class="statement-figure" id="monthlyTotal">$0.00</div>
+      </div>
+      <div class="statement-sub" id="soonNote"></div>
+    </div>
+    <div class="divider"></div>
+    <div class="breakdown">
+      <div><b id="countActive">0</b> active subscriptions</div>
+      <div><b id="yearlyTotal">$0.00</b> per year</div>
+    </div>
+  </div>
+
+  <div class="ledger">
+    <div class="ledger-head">
+      <div>SUBSCRIPTION</div>
+      <div style="text-align:right">AMOUNT</div>
+      <div style="text-align:right">NEXT CHARGE</div>
+      <div></div>
+    </div>
+    <div id="rows"></div>
+  </div>
+
+  <div class="limit-banner" id="limitBanner" style="display:none">
+    <p>You've hit the free plan limit (3 subscriptions).<br><span>Unlock unlimited tracking and email alerts.</span></p>
+    <button class="upgrade-btn" id="upgradeBtn">Upgrade</button>
+  </div>
+
+  <form id="addForm">
+    <div class="form-title">Add a subscription</div>
+    <div class="form-grid">
+      <div>
+        <label>Name</label>
+        <input type="text" id="fName" placeholder="Netflix" required>
+      </div>
+      <div>
+        <label>Amount</label>
+        <input type="number" id="fAmount" placeholder="15.99" step="0.01" min="0" required>
+      </div>
+      <div>
+        <label>Frequency</label>
+        <select id="fCycle">
+          <option value="monthly">Monthly</option>
+          <option value="yearly">Yearly</option>
+        </select>
+      </div>
+      <div>
+        <label>Next charge date</label>
+        <input type="date" id="fDate" required>
+      </div>
+    </div>
+    <div class="error" id="formError"></div>
+    <button type="submit" class="submit">Add subscription</button>
+  </form>
+
+  <div class="pro-panel">
+    <h3>Pro features</h3>
+    <div class="pro-feature">
+      <span>Unlimited subscriptions</span>
+      <span class="status" id="statUnlimited">LOCKED</span>
+    </div>
+    <div class="pro-feature">
+      <span>Email reminders before each charge</span>
+      <span class="status locked">COMING SOON</span>
+    </div>
+    <div class="pro-feature">
+      <span>Auto-detect subscriptions from your inbox</span>
+      <span class="status locked">COMING SOON</span>
+    </div>
+  </div>
+
+  <div class="footer-note">Synced to your account — access it from any device.</div>
+</div>
+
+<script>
+  // ---- Supabase setup ----
+  const SUPABASE_URL = 'https://popruxdkjgecqhjziexw.supabase.co';
+  const SUPABASE_KEY = 'sb_publishable_IiBkpJMeHgtc0Dorn5POSw_rgGcuSKk';
+  const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+  const FREE_LIMIT = 3;
+  let currentUser = null;
+  let subs = [];
+  let isPro = false;
+
+  const loadingScreen = document.getElementById('loadingScreen');
+  const authScreen = document.getElementById('authScreen');
+  const appScreen = document.getElementById('app');
+
+  function showScreen(name) {
+    loadingScreen.classList.add('hidden');
+    authScreen.classList.add('hidden');
+    appScreen.classList.add('hidden');
+    if (name === 'loading') loadingScreen.classList.remove('hidden');
+    if (name === 'auth') authScreen.classList.remove('hidden');
+    if (name === 'app') appScreen.classList.remove('hidden');
+  }
+
+  // ---- Auth ----
+  document.getElementById('authForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const email = document.getElementById('authEmail').value.trim();
+    const errEl = document.getElementById('authError');
+    const infoEl = document.getElementById('authInfo');
+    const btn = document.getElementById('authBtn');
+    errEl.textContent = '';
+    infoEl.textContent = '';
+    btn.disabled = true;
+    btn.textContent = 'Sending…';
+
+    const { error } = await sb.auth.signInWithOtp({
+      email,
+      options: { emailRedirectTo: window.location.origin + window.location.pathname }
+    });
+
+    btn.disabled = false;
+    btn.textContent = 'Send login link';
+
+    if (error) {
+      errEl.textContent = error.message;
+    } else {
+      infoEl.textContent = 'Check your email for a login link.';
+    }
+  });
+
+  document.getElementById('logoutBtn').addEventListener('click', async () => {
+    await sb.auth.signOut();
+    subs = [];
+    showScreen('auth');
+  });
+
+  async function init() {
+    showScreen('loading');
+    const { data: { session } } = await sb.auth.getSession();
+    if (session) {
+      await onLoggedIn(session.user);
+    } else {
+      showScreen('auth');
+    }
+  }
+
+  sb.auth.onAuthStateChange((event, session) => {
+    if (event === 'SIGNED_IN' && session) {
+      onLoggedIn(session.user);
+    } else if (event === 'SIGNED_OUT') {
+      showScreen('auth');
+    }
+  });
+
+  async function onLoggedIn(user) {
+    currentUser = user;
+    await loadProfile();
+    await loadSubs();
+    showScreen('app');
+    render();
+  }
+
+  // ---- Data ----
+  async function loadProfile() {
+    const { data, error } = await sb
+      .from('profiles')
+      .select('is_pro')
+      .eq('id', currentUser.id)
+      .single();
+    isPro = data ? data.is_pro : false;
+  }
+
+  async function loadSubs() {
+    const { data, error } = await sb
+      .from('subscriptions')
+      .select('*')
+      .order('next_date', { ascending: true });
+    subs = data || [];
+  }
+
+  function fmt(n) {
+    return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  const today = new Date();
+  today.setHours(0,0,0,0);
+  document.getElementById('today').textContent = today.toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' });
+
+  function daysUntil(dateStr) {
+    const d = new Date(dateStr + 'T00:00:00');
+    return Math.round((d - today) / 86400000);
+  }
+
+  function render() {
+    let monthly = 0;
+    subs.forEach(s => { monthly += s.cycle === 'yearly' ? Number(s.amount) / 12 : Number(s.amount); });
+    const yearly = monthly * 12;
+    const soon = subs.filter(s => daysUntil(s.next_date) <= 7 && daysUntil(s.next_date) >= 0);
+
+    document.getElementById('monthlyTotal').textContent = fmt(monthly);
+    document.getElementById('yearlyTotal').textContent = fmt(yearly);
+    document.getElementById('countActive').textContent = subs.length;
+    document.getElementById('soonNote').innerHTML = soon.length
+      ? `<b>${soon.length}</b> due in the next 7 days`
+      : 'nothing due this week';
+
+    document.getElementById('proBadge').style.display = isPro ? 'inline-block' : 'none';
+    document.getElementById('statUnlimited').textContent = isPro ? 'ACTIVE' : 'LOCKED';
+    document.getElementById('statUnlimited').className = 'status ' + (isPro ? 'active' : 'locked');
+
+    const atLimit = !isPro && subs.length >= FREE_LIMIT;
+    document.getElementById('limitBanner').style.display = atLimit ? 'flex' : 'none';
+    document.getElementById('addForm').style.display = atLimit ? 'none' : 'grid';
+
+    const rowsEl = document.getElementById('rows');
+    if (subs.length === 0) {
+      rowsEl.innerHTML = '<div class="empty">No subscriptions yet. Add your first one below.</div>';
+      return;
+    }
+
+    rowsEl.innerHTML = subs.map(s => {
+      const isSoon = daysUntil(s.next_date) <= 7;
+      const dateLabel = new Date(s.next_date + 'T00:00:00').toLocaleDateString('en-US', { day: '2-digit', month: 'short' });
+      return `
+        <div class="row">
+          <div>
+            <div class="row-name">${escapeHtml(s.name)}</div>
+            <span class="row-cycle">${s.cycle === 'yearly' ? 'yearly' : 'monthly'}</span>
+          </div>
+          <div class="row-amount">${fmt(Number(s.amount))}</div>
+          <div class="row-date ${isSoon ? 'soon' : ''}">${dateLabel}</div>
+          <button class="row-del" onclick="removeSub('${s.id}')">✕</button>
+        </div>
+      `;
+    }).join('');
+  }
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  window.removeSub = async function(id) {
+    await sb.from('subscriptions').delete().eq('id', id);
+    subs = subs.filter(s => s.id !== id);
+    render();
+  };
+
+  document.getElementById('addForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const name = document.getElementById('fName').value.trim();
+    const amount = parseFloat(document.getElementById('fAmount').value);
+    const cycle = document.getElementById('fCycle').value;
+    const date = document.getElementById('fDate').value;
+    const errEl = document.getElementById('formError');
+
+    if (!name || isNaN(amount) || amount <= 0 || !date) {
+      errEl.textContent = 'Fill in all fields with valid values.';
+      return;
+    }
+    if (!isPro && subs.length >= FREE_LIMIT) {
+      errEl.textContent = 'You have reached the free plan limit.';
+      return;
+    }
+    errEl.textContent = '';
+
+    const { data, error } = await sb
+      .from('subscriptions')
+      .insert({ user_id: currentUser.id, name, amount, cycle, next_date: date })
+      .select()
+      .single();
+
+    if (error) {
+      errEl.textContent = error.message;
+      return;
+    }
+
+    subs.push(data);
+    render();
+    e.target.reset();
+  });
+
+  document.getElementById('upgradeBtn').addEventListener('click', () => {
+    // TODO: replace with your real Tropipay payment link.
+    alert('Your Tropipay payment link goes here. Once the webhook is built, this will redirect and unlock automatically.');
+  });
+
+  init();
+</script>
+</body>
+</html>
